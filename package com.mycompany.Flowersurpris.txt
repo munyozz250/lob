@@ -1,0 +1,335 @@
+package com.mycompany.Flowersurprise;
+
+/**
+ *
+ * @author Admin
+ */
+import javax.swing.*;
+import java.awt.*;
+import java.awt.geom.*;
+import java.awt.image.BufferedImage;
+import javax.imageio.ImageIO;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Random;
+
+public class FlowerSurprise extends JFrame {
+
+    private FlowerPanel panel;
+
+    public FlowerSurprise() {
+        setTitle("FOR YOU KEYABETSWE🥹🥹");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setSize(700, 850);
+        setLocationRelativeTo(null);
+        setResizable(false);
+
+        panel = new FlowerPanel();
+        add(panel);
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> {
+            FlowerSurprise app = new FlowerSurprise();
+            app.setVisible(true);
+        });
+    }
+
+    // ================= Main drawing / animation panel =================
+    static class FlowerPanel extends JPanel {
+
+        private double t = 0;                   // time counter for pulse animation
+        private boolean exploded = false;
+        private boolean showMessage = false;
+        private double messageAlpha = 0f;
+        private final List<Petal> burst = new ArrayList<>();
+        private final Random rand = new Random();
+        private JButton actionButton;
+
+        // Photos for the slideshow
+        private BufferedImage photo1;
+        private BufferedImage photo2;
+        private int currentPhotoIndex = 0;
+        private Timer slideTimer;
+
+        FlowerPanel() {
+            setBackground(new Color(15, 10, 20));
+            setLayout(null);
+
+            loadImages();
+
+            actionButton = new JButton("Press Me \u2764");
+            styleButton();
+            actionButton.setBounds(260, 750, 180, 50);
+            actionButton.addActionListener(e -> triggerExplosion());
+            add(actionButton);
+
+            Timer timer = new Timer(16, e -> {
+                t += 0.05;
+                updateParticles();
+                if (showMessage && messageAlpha < 1f) {
+                    messageAlpha += 0.02f;
+                }
+                repaint();
+            });
+            timer.start();
+
+            // Slideshow timer to switch photos every 3.5 seconds when exploded
+            slideTimer = new Timer(3500, e -> {
+                if (exploded) {
+                    currentPhotoIndex = (currentPhotoIndex + 1) % 2;
+                }
+            });
+            slideTimer.start();
+        }
+
+        private void loadImages() {
+            try {
+                photo1 = ImageIO.read(getClass().getResourceAsStream("WhatsApp1.jpeg"));
+                photo2 = ImageIO.read(getClass().getResourceAsStream("WhatsApp2.jpeg"));
+            } catch (Exception e) {
+                System.out.println("Could not load photos. Make sure WhatsApp1.jpeg and WhatsApp2.jpeg are in the package folder.");
+            }
+        }
+
+        private void styleButton() {
+            actionButton.setFocusPainted(false);
+            actionButton.setBackground(new Color(200, 20, 40));
+            actionButton.setForeground(Color.WHITE);
+            actionButton.setFont(new Font("SansSerif", Font.BOLD, 16));
+            actionButton.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        }
+
+        private void triggerExplosion() {
+            if (exploded) {
+                // allow pressing again -> reset and re-bloom
+                burst.clear();
+                exploded = false;
+                showMessage = false;
+                messageAlpha = 0f;
+                currentPhotoIndex = 0;
+                actionButton.setText("Press Me \u2764");
+                return;
+            }
+            exploded = true;
+            actionButton.setText("Press Again \u2764");
+
+            int cx = getWidth() / 2;
+            int cy = 200;
+
+            // spawn a burst of small flowers flying outward in all directions
+            int count = 50;
+            for (int i = 0; i < count; i++) {
+                double angle = (Math.PI * 2 * i / count) + (rand.nextDouble() - 0.5) * 0.3;
+                double speed = 2 + rand.nextDouble() * 4;
+                double vx = Math.cos(angle) * speed;
+                double vy = Math.sin(angle) * speed;
+                Color c = randomFlowerColor();
+                double size = 14 + rand.nextDouble() * 18;
+                burst.add(new Petal(cx, cy, vx, vy, size, c, rand.nextDouble() * 360));
+            }
+
+            // show message shortly after
+            Timer msgDelay = new Timer(600, e -> {
+                showMessage = true;
+                ((Timer) e.getSource()).stop();
+            });
+            msgDelay.setRepeats(false);
+            msgDelay.start();
+        }
+
+        private Color randomFlowerColor() {
+            Color[] palette = {
+                new Color(220, 20, 60),   // crimson
+                new Color(255, 105, 130), // pink
+                new Color(255, 60, 90),   // rose red
+                new Color(255, 182, 193), // light pink
+                new Color(255, 140, 0)    // warm accent
+            };
+            return palette[rand.nextInt(palette.length)];
+        }
+
+        private void updateParticles() {
+            List<Petal> dead = new ArrayList<>();
+            for (Petal p : burst) {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.02;          // slight gravity drift
+                p.vx *= 0.995;        // air drag
+                p.rotation += p.spin;
+                p.life -= 0.006;
+                if (p.life <= 0) dead.add(p);
+            }
+            burst.removeAll(dead);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            Graphics2D g2 = (Graphics2D) g;
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            int cx = getWidth() / 2;
+            int cy = 200;
+
+            if (!exploded) {
+                // pulsing glow behind the initial flower
+                double pulse = 1.0 + 0.12 * Math.sin(t);
+                drawGlow(g2, cx, cy, (float) (150 * pulse));
+                drawFlower(g2, cx, cy, 90 * pulse, t * 5, new Color(220, 20, 40), 1.0f);
+            } else {
+                // draw remaining burst particles
+                for (Petal p : burst) {
+                    float alpha = (float) Math.max(0, Math.min(1, p.life));
+                    drawGlow(g2, (int) p.x, (int) p.y, (float) (p.size * 2.5f * alpha));
+                    drawFlower(g2, p.x, p.y, p.size, p.rotation, p.color, alpha);
+                }
+                // Draw slideshow photo frame in the center when exploded
+                drawSlideshow(g2, cx, cy);
+            }
+
+            if (showMessage) {
+                drawMessage(g2, cx, 580);
+            }
+        }
+
+        private void drawSlideshow(Graphics2D g2, int cx, int cy) {
+            BufferedImage currentImg = (currentPhotoIndex == 0) ? photo1 : photo2;
+            int frameWidth = 180;
+            int frameHeight = 180;
+            int fx = cx - frameWidth / 2;
+            int fy = cy - frameHeight / 2;
+
+            // Draw glowing background box for photo
+            g2.setColor(new Color(255, 105, 130, 50));
+            g2.fillRoundRect(fx - 6, fy - 6, frameWidth + 12, frameHeight + 12, 20, 20);
+
+            // Draw white photo border frame
+            g2.setColor(Color.WHITE);
+            g2.fillRoundRect(fx - 3, fy - 3, frameWidth + 6, frameHeight + 6, 16, 16);
+
+            if (currentImg != null) {
+                // Draw user picture cropped/scaled nicely
+                Shape oldClip = g2.getClip();
+                g2.setClip(new RoundRectangle2D.Double(fx, fy, frameWidth, frameHeight, 12, 12));
+                g2.drawImage(currentImg, fx, fy, frameWidth, frameHeight, null);
+                g2.setClip(oldClip);
+            } else {
+                // Fallback text if pictures aren't found yet
+                g2.setColor(Color.DARK_GRAY);
+                g2.fillRect(fx, fy, frameWidth, frameHeight);
+                g2.setColor(Color.WHITE);
+                g2.setFont(new Font("SansSerif", Font.BOLD, 12));
+                g2.drawString("Photos not found", fx + 35, fy + 90);
+            }
+        }
+
+        private void drawGlow(Graphics2D g2, int cx, int cy, float radius) {
+            if (radius <= 0) return;
+            RadialGradientPaint glow = new RadialGradientPaint(
+                new Point(cx, cy), radius,
+                new float[]{0f, 1f},
+                new Color[]{new Color(255, 80, 80, 90), new Color(255, 80, 80, 0)}
+            );
+            g2.setPaint(glow);
+            g2.fill(new Ellipse2D.Double(cx - radius, cy - radius, radius * 2, radius * 2));
+        }
+
+        // draws a simple stylised flower: rotated petals + center
+        private void drawFlower(Graphics2D g2, double cx, double cy, double size,
+                                 double rotationDeg, Color base, float alpha) {
+            Composite old = g2.getComposite();
+            g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
+
+            int petals = 6;
+            for (int i = 0; i < petals; i++) {
+                double angle = Math.toRadians(rotationDeg + (360.0 / petals) * i);
+                AffineTransform old_t = g2.getTransform();
+                g2.translate(cx, cy);
+                g2.rotate(angle);
+
+                GradientPaint petalPaint = new GradientPaint(
+                    0, 0, brighten(base, 40),
+                    0, (float) size, base.darker()
+                );
+                g2.setPaint(petalPaint);
+
+                Ellipse2D petal = new Ellipse2D.Double(-size * 0.28, 0, size * 0.56, size);
+                g2.fill(petal);
+
+                g2.setTransform(old_t);
+            }
+
+            // center of the flower
+            double centerSize = size * 0.32;
+            RadialGradientPaint centerPaint = new RadialGradientPaint(
+                new Point2D.Double(cx, cy), (float) centerSize,
+                new float[]{0f, 1f},
+                new Color[]{new Color(255, 220, 100), new Color(230, 160, 30)}
+            );
+            g2.setPaint(centerPaint);
+            g2.fill(new Ellipse2D.Double(cx - centerSize / 2, cy - centerSize / 2, centerSize, centerSize));
+
+            g2.setComposite(old);
+        }
+
+        private Color brighten(Color c, int amt) {
+            return new Color(
+                Math.min(255, c.getRed() + amt),
+                Math.min(255, c.getGreen() + amt),
+                Math.min(255, c.getBlue() + amt)
+            );
+        }
+
+        private void drawMessage(Graphics2D g2, int cx, int y) {
+            Composite old = g2.getComposite();
+            g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, (float) messageAlpha));
+            
+            // Line 1: Main Title
+            g2.setFont(new Font("SansSerif", Font.BOLD, 24));
+            String line1 = "For You, Keyabetswe \u2764";
+            FontMetrics fm1 = g2.getFontMetrics();
+            g2.setColor(new Color(255, 235, 235));
+            g2.drawString(line1, cx - fm1.stringWidth(line1) / 2, y);
+
+            // Line 2: The Date
+            g2.setFont(new Font("SansSerif", Font.PLAIN, 15));
+            String line2 = "Since September 7th, when you agreed to be my girlfriend";
+            FontMetrics fm2 = g2.getFontMetrics();
+            g2.setColor(new Color(255, 180, 190));
+            g2.drawString(line2, cx - fm2.stringWidth(line2) / 2, y + 32);
+
+            // Line 3: Sentiment
+            String line3 = "I honestly don't even know how to put into words how much you mean to me...";
+            FontMetrics fm3 = g2.getFontMetrics();
+            g2.setColor(new Color(220, 200, 210));
+            g2.drawString(line3, cx - fm3.stringWidth(line3) / 2, y + 60);
+
+            // Line 4: Special Phrase requested
+            g2.setFont(new Font("SansSerif", Font.BOLD | Font.ITALIC, 18));
+            String line4 = "\u2728 Little things do matter \u2728";
+            FontMetrics fm4 = g2.getFontMetrics();
+            g2.setColor(new Color(255, 215, 0)); // Golden/Warm text color for emphasis
+            g2.drawString(line4, cx - fm4.stringWidth(line4) / 2, y + 95);
+
+            g2.setComposite(old);
+        }
+    }
+
+    // simple data holder for each flying flower particle
+    static class Petal {
+        double x, y, vx, vy, size, rotation, spin, life = 1.0;
+        Color color;
+
+        Petal(double x, double y, double vx, double vy, double size, Color color, double rotation) {
+            this.x = x;
+            this.y = y;
+            this.vx = vx;
+            this.vy = vy;
+            this.size = size;
+            this.color = color;
+            this.rotation = rotation;
+            this.spin = (Math.random() - 0.5) * 6;
+        }
+    }
+}
